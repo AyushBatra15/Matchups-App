@@ -10,7 +10,7 @@ Sys.setenv("VROOM_CONNECTION_SIZE" = 2*131072)
 assign_nba_players()
 assign_nba_teams()
 
-SEASON = "2022-23"
+SEASON = "2021-22"
 S_TYPE = "Regular Season"
 
 offense <- nba_leaguedashplayerstats(season = SEASON,
@@ -65,7 +65,24 @@ matchups <- matchups %>%
          PARTIAL_POSS, PLAYER_PTS, MATCHUP_FGA, MATCHUP_FTA, MATCHUP_TOV,
          OFF_PLAYER_SZN_PTS = PTS, OFF_PLAYER_SZN_MIN = MIN)
 
-write_csv(matchups, file = "data/matchups2023_rs.csv")
+construct_f_name <- function(season, season_type) {
+  if (season_type == "Regular Season") {
+    suffix <- "_rs"
+  }
+  else if (season_type == "Playoffs") {
+    suffix <- "_pl"
+  }
+  else {
+    return("ERROR")
+  }
+  s <- as.character(as.numeric(str_sub(season, 1, 4)) + 1)
+  f <- paste("data/matchups", s, suffix, ".csv",sep = "")
+  return( f )
+}
+
+f <- construct_f_name(SEASON, S_TYPE)
+
+write_csv(matchups, file = f)
 
 
 
