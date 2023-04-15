@@ -89,12 +89,16 @@ f <- construct_f_name(SEASON)
 
 # COMBINE MATCHUP DATA ------
 
-all_matchups <- tibble()
-for (i in c(19:23)) {
-  fname = paste("data/matchups20",i,"_rs.csv", sep = "")
-  df <- read_csv(file = fname)
-  all_matchups <- rbind(all_matchups, df)
-}
+# Note: Basically this section just combines the year-by-year matchups 
+# (generated in above section) into one big table, but I have deleted 
+# the year-by-year matchups to save space
+
+# all_matchups <- tibble()
+# for (i in c(19:23)) {
+#   fname = paste("data/matchups20",i,"_rs.csv", sep = "")
+#   df <- read_csv(file = fname)
+#   all_matchups <- rbind(all_matchups, df)
+# }
 
 # write_csv(all_matchups,
 #           file = "data/all_matchups.csv")
