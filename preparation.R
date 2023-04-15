@@ -10,7 +10,7 @@ Sys.setenv("VROOM_CONNECTION_SIZE" = 2*131072)
 assign_nba_players()
 assign_nba_teams()
 
-SEASON = "2020-21"
+SEASON = "2018-19"
 S_TYPE = "Regular Season"
 
 offense <- nba_leaguedashplayerstats(season = SEASON,
