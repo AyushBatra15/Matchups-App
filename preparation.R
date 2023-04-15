@@ -183,3 +183,38 @@ write_csv(defstats,
           file = "data/defstats.csv")
 
 
+# TEAM AND PLAYER IMAGES ---------
+
+team_info <- df_dict_nba_teams %>%
+  filter(idTeam >= 1610612737 & idTeam <= 1610612766) %>%
+  select(nameTeam, slugTeam, colorsTeam)
+
+espn_tm <- espn_nba_teams()
+espn_tm <- espn_tm %>%
+  select(display_name, logo) %>%
+  mutate(display_name = ifelse(display_name == "LA Clippers",
+                               "Los Angeles Clippers",
+                               display_name))
+
+team_info <- team_info %>%
+  inner_join(espn_tm, by = c("nameTeam" = "display_name"))
+
+team_info <- team_info %>%
+  separate(colorsTeam, into = c("color1","color2","color3"),
+           sep = ", ")
+
+team_info <- team_info %>%
+  select(-color3)
+
+# write_csv(team_info,
+#           file = "data/team_info.csv")
+
+player_info <- df_dict_nba_players %>%
+  filter(yearSeasonLast >= 2019)
+
+player_info <- player_info %>%
+  select(idPlayer, namePlayer, urlPlayerHeadshot)
+
+# write_csv(player_info,
+#           file = "data/player_headshots.csv")
+
