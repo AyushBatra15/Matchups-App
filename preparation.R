@@ -83,7 +83,7 @@ construct_f_name <- function(season) {
 
 f <- construct_f_name(SEASON)
 
-write_csv(matchups, file = f)
+# write_csv(matchups, file = f)
 
 
 
@@ -96,8 +96,8 @@ for (i in c(19:23)) {
   all_matchups <- rbind(all_matchups, df)
 }
 
-write_csv(all_matchups,
-          file = "data/all_matchups.csv")
+# write_csv(all_matchups,
+#           file = "data/all_matchups.csv")
 
 
 # OTHER DEFENSIVE STATS ------
@@ -135,11 +135,37 @@ for (i in c(2019:2023)) {
     mutate(Season = sname,
            numSeason = i)
   
+  p <- nba_leaguedashplayerstats(season = sname,
+                                 season_type = "Regular Season",
+                                 measure_type = "Advanced")
+  p <- p[["LeagueDashPlayerStats"]]
+  
+  p <- p %>%
+    select(PLAYER_ID, POSS) %>%
+    mutate(POSS = as.numeric(POSS))
+  
+  hustle <- hustle %>%
+    left_join(p, by = "PLAYER_ID")
+  
   all_blocks <- rbind(all_blocks, b)
   all_rimdef <- rbind(all_rimdef, rd)
   all_defl <- rbind(all_defl, hustle)
+  
+  print(paste("Loaded stats for",i))
 }
 
+blocks <- all_blocks %>%
+  select(PLAYER_ID, PLAYER_NAME, TEAM = TEAM_ABBREVIATION, 
+         Season, numSeason, AGE, BLK) %>%
+  mutate(BLK = as.numeric(BLK),
+         AGE = as.numeric(AGE))
+
+rimdef <- all_rimdef %>%
+  select(PLAYER_ID = CLOSE_DEF_PERSON_ID, PLAYER_NAME, LT_06_PCT, PLUSMINUS) %>%
+  mutate(across(c(LT_06_PCT : PLUSMINUS), as.numeric))
+
+defl <- all_defl %>%
+  select(PLAYER_ID, PLAYER_NAME, DEFLECTIONS, CHARGES_DRAWN)
 
 
 
