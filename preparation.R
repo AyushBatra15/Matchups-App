@@ -44,6 +44,13 @@ for (t in team_ids) {
                                           def_team_id = as.character(t))
   tm_matchups <- tm_matchups[["SeasonMatchups"]]
   
+  thisTeam <- df_dict_nba_teams %>%
+    filter(idTeam == t) %>%
+    pull(slugTeam)
+  
+  tm_matchups <- tm_matchups %>%
+    mutate(DEF_PLAYER_TM = thisTeam)
+  
   all <- rbind(all, tm_matchups)
   
   iter <- iter + 1
@@ -62,8 +69,8 @@ matchups <- matchups %>%
          numSeason = as.numeric(str_sub(Season, 1, 4)) + 1) %>%
   select(Season, numSeason, 
          OFF_PLAYER_ID, OFF_PLAYER_NAME, DEF_PLAYER_ID, DEF_PLAYER_NAME,
-         PARTIAL_POSS, PLAYER_PTS, MATCHUP_FGA, MATCHUP_FTA, MATCHUP_TOV,
-         OFF_PLAYER_SZN_PTS = PTS, OFF_PLAYER_SZN_MIN = MIN)
+         DEF_PLAYER_TM, PARTIAL_POSS, PLAYER_PTS, MATCHUP_FGA, MATCHUP_FTA,
+         MATCHUP_TOV, OFF_PLAYER_SZN_PTS = PTS, OFF_PLAYER_SZN_MIN = MIN)
 
 construct_f_name <- function(season, season_type) {
   if (season_type == "Regular Season") {
