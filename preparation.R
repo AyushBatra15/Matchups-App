@@ -161,11 +161,23 @@ blocks <- all_blocks %>%
          AGE = as.numeric(AGE))
 
 rimdef <- all_rimdef %>%
-  select(PLAYER_ID = CLOSE_DEF_PERSON_ID, PLAYER_NAME, LT_06_PCT, PLUSMINUS) %>%
+  select(PLAYER_ID = CLOSE_DEF_PERSON_ID, Season, numSeason, 
+         LT_06_PCT, PLUSMINUS) %>%
   mutate(across(c(LT_06_PCT : PLUSMINUS), as.numeric))
 
 defl <- all_defl %>%
-  select(PLAYER_ID, PLAYER_NAME, DEFLECTIONS, CHARGES_DRAWN)
+  mutate(across(c(DEFLECTIONS : CHARGES_DRAWN), as.numeric)) %>%
+  mutate(DEFLECTIONS = 100 * (DEFLECTIONS + CHARGES_DRAWN) / POSS,
+         DEFLECTIONS = round(DEFLECTIONS, 1)) %>%
+  select(PLAYER_ID, Season, numSeason, MIN, DEFLECTIONS) %>%
+  mutate(MIN = as.numeric(MIN))
 
+defstats <- blocks %>%
+  inner_join(defl, by = c("PLAYER_ID","Season","numSeason")) %>%
+  inner_join(rimdef, by = c("PLAYER_ID","Season","numSeason")) %>%
+  relocate(MIN, .after = AGE)
+
+write_csv(defstats, 
+          file = "data/defstats.csv")
 
 
