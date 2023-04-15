@@ -102,8 +102,6 @@ for (i in c(19:23)) {
 
 # OTHER DEFENSIVE STATS ------
 
-## BLOCKS ----
-
 all_blocks <- tibble()
 all_rimdef <- tibble()
 all_defl <- tibble()
