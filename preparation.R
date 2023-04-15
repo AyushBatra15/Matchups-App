@@ -11,7 +11,6 @@ assign_nba_players()
 assign_nba_teams()
 
 SEASON = "2021-22"
-S_TYPE = "Regular Season"
 
 
 # GET MATCHUP DATA FOR SPECIFIC YEAR ----
@@ -26,7 +25,7 @@ pts <- offense %>%
   mutate(PTS = as.numeric(PTS))
 
 mins <- nba_leaguedashplayerstats(season = SEASON,
-                                  season_type = S_TYPE,
+                                  season_type = "Regular Season",
                                   per_mode = "Totals")
 mins <- mins[["LeagueDashPlayerStats"]]
 
@@ -43,7 +42,7 @@ all <- tibble()
 iter <- 0
 for (t in team_ids) {
   tm_matchups <- nba_leagueseasonmatchups(season = SEASON,
-                                          season_type = S_TYPE,
+                                          season_type = "Regular Season",
                                           def_team_id = as.character(t))
   tm_matchups <- tm_matchups[["SeasonMatchups"]]
   
@@ -75,22 +74,14 @@ matchups <- matchups %>%
          DEF_PLAYER_TM, PARTIAL_POSS, PLAYER_PTS, MATCHUP_FGA, MATCHUP_FTA,
          MATCHUP_TOV, OFF_PLAYER_SZN_PTS = PTS, OFF_PLAYER_SZN_MIN = MIN)
 
-construct_f_name <- function(season, season_type) {
-  if (season_type == "Regular Season") {
-    suffix <- "_rs"
-  }
-  else if (season_type == "Playoffs") {
-    suffix <- "_pl"
-  }
-  else {
-    return("ERROR")
-  }
+construct_f_name <- function(season) {
+  suffix <- "_rs"
   s <- as.character(as.numeric(str_sub(season, 1, 4)) + 1)
   f <- paste("data/matchups", s, suffix, ".csv",sep = "")
   return( f )
 }
 
-f <- construct_f_name(SEASON, S_TYPE)
+f <- construct_f_name(SEASON)
 
 write_csv(matchups, file = f)
 
@@ -107,5 +98,48 @@ for (i in c(19:23)) {
 
 write_csv(all_matchups,
           file = "data/all_matchups.csv")
+
+
+# OTHER DEFENSIVE STATS ------
+
+## BLOCKS ----
+
+all_blocks <- tibble()
+all_rimdef <- tibble()
+all_defl <- tibble()
+for (i in c(2019:2023)) {
+  sname <- paste(i-1,"-",as.character(str_sub(i,3,4)), sep = "")
+  b <- nba_leaguedashplayerstats(season = sname,
+                                 season_type = "Regular Season",
+                                 per_mode = "Per100Possessions")
+  b <- b[["LeagueDashPlayerStats"]]
+  
+  b <- b %>%
+    mutate(Season = sname,
+           numSeason = i)
+  
+  rd <- nba_leaguedashptdefend(season = sname,
+                               season_type = "Regular Season",
+                               defense_category = "Less+Than+6Ft")
+  rd <- rd[["LeagueDashPTDefend"]]
+  
+  rd <- rd %>%
+    mutate(Season = sname,
+           numSeason = i)
+  
+  hustle <- nba_leaguehustlestatsplayer(season = sname,
+                                        season_type = "Regular Season")
+  hustle <- hustle[["HustleStatsPlayer"]]
+  
+  hustle <- hustle %>%
+    mutate(Season = sname,
+           numSeason = i)
+  
+  all_blocks <- rbind(all_blocks, b)
+  all_rimdef <- rbind(all_rimdef, rd)
+  all_defl <- rbind(all_defl, hustle)
+}
+
+
 
 
