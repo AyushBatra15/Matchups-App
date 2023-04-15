@@ -1,0 +1,7 @@
+library(shiny)
+library(shinythemes)
+library(tidyverse)
+library(gt)
+library(webshot)
+library(ggimage)
+library(scales)
