@@ -10,11 +10,14 @@ Sys.setenv("VROOM_CONNECTION_SIZE" = 2*131072)
 assign_nba_players()
 assign_nba_teams()
 
-SEASON = "2018-19"
+SEASON = "2021-22"
 S_TYPE = "Regular Season"
 
+
+# GET MATCHUP DATA FOR SPECIFIC YEAR ----
+
 offense <- nba_leaguedashplayerstats(season = SEASON,
-                                     season_type = S_TYPE,
+                                     season_type = "Regular Season",
                                      per_mode = "Per100Possessions")
 offense <- offense[["LeagueDashPlayerStats"]]
 
@@ -93,6 +96,16 @@ write_csv(matchups, file = f)
 
 
 
+# COMBINE MATCHUP DATA ------
 
+all_matchups <- tibble()
+for (i in c(19:23)) {
+  fname = paste("data/matchups20",i,"_rs.csv", sep = "")
+  df <- read_csv(file = fname)
+  all_matchups <- rbind(all_matchups, df)
+}
+
+write_csv(all_matchups,
+          file = "data/all_matchups.csv")
 
 
