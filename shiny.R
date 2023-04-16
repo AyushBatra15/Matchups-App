@@ -42,7 +42,7 @@ matchups_leaderboard <- matchups %>%
   filter(!is.na(MIN))
 
 matchups_leaderboard <- matchups_leaderboard %>%
-  filter(MIN >= 1000)
+  filter(MIN >= 500)
 
 matchups_leaderboard <- matchups_leaderboard %>%
   group_by(Season) %>%
@@ -51,7 +51,7 @@ matchups_leaderboard <- matchups_leaderboard %>%
   ungroup()
 
 def_leaders <- defstats %>%
-  filter(MIN >= 1000) %>%
+  filter(MIN >= 500) %>%
   group_by(Season) %>%
   mutate(Pct_Blk = rank(BLK) / n(),
          Z_Blk = (BLK - mean(BLK)) / sd(BLK),
