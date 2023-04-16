@@ -137,10 +137,10 @@ ui <- fluidPage(
                ),
                
                mainPanel(
-                 tableOutput("player_table")
-                 # br(),
-                 # plotOutput("skills_plot"),
-                 # br()
+                 tableOutput("player_table"),
+                 br(),
+                 plotOutput("skills_plot"),
+                 br()
                )
       )
        )
@@ -318,7 +318,7 @@ server <- function(input, output) {
              PLUSMINUS, Pct_Rim, DEFLECTIONS, Pct_Defl, MATCHUP_DIFF, Pct_MD, 
              Sum_Z, Pct) %>%
       gt() %>%
-      tab_header(title = "NBA Defensive Composite",
+      tab_header(title = paste(input$player_name, "Defensive Stats"),
                  subtitle = "Matchup Difficulty = average season PTS/100 of opponent matchup | Only Seasons with at least 800 Minutes Displayed") %>%
       text_transform(
         locations = cells_body(c(urlPlayerHeadshot, logo)),
@@ -360,9 +360,84 @@ server <- function(input, output) {
       opt_row_striping() %>%
       tab_source_note("By Ayush Batra | Data from NBA.com")
   }, width = 1000)
-        
+  
+  output$skills_plot <- renderPlot( {
+    player_board <- matchups %>%
+      filter(OFF_PLAYER_SZN_MIN >= 300) %>%
+      group_by(DEF_PLAYER_ID, numSeason) %>%
+      summarize(PLAYER_NAME = first(DEF_PLAYER_NAME),
+                MATCHUP_DIFF = weighted.mean(OFF_PLAYER_SZN_PTS, w = PARTIAL_POSS)) %>%
+      ungroup() %>%
+      rename(PLAYER_ID = DEF_PLAYER_ID) %>%
+      left_join(player_mins, by = c("PLAYER_ID","numSeason")) %>%
+      left_join(player_tms, by = c("PLAYER_ID","numSeason")) %>%
+      filter(!is.na(MIN))
     
+    player_board <- player_board %>%
+      filter(MIN >= 800)
     
+    player_board <- player_board %>%
+      group_by(numSeason) %>%
+      mutate(Pct = rank(MATCHUP_DIFF) / n(),
+             Z = (MATCHUP_DIFF - mean(MATCHUP_DIFF)) / sd(MATCHUP_DIFF)) %>%
+      ungroup()
+    
+    player_def <- defstats %>%
+      filter(MIN >= 800) %>%
+      group_by(numSeason) %>%
+      mutate(Pct_Blk = rank(BLK) / n(),
+             Z_Blk = (BLK - mean(BLK)) / sd(BLK),
+             Pct_Rim = rank(-PLUSMINUS) / n(),
+             Z_Rim = (mean(PLUSMINUS) - PLUSMINUS) / sd(PLUSMINUS),
+             Pct_Defl = rank(DEFLECTIONS) / n(),
+             Z_Defl = (DEFLECTIONS - mean(DEFLECTIONS)) / sd(DEFLECTIONS)) %>%
+      select(PLAYER_ID, PLAYER_NAME, numSeason, TEAM, MIN, BLK, Pct_Blk, Z_Blk,
+             PLUSMINUS, Pct_Rim, Z_Rim, DEFLECTIONS, Pct_Defl, Z_Defl)
+    
+    pb <- player_board %>%
+      select(PLAYER_ID, numSeason, MATCHUP_DIFF, Pct_MD = Pct, Z_MD = Z)
+    
+    player_def <- player_def %>%
+      inner_join(pb, by = c("PLAYER_ID","numSeason"))
+    
+    player_def <- player_def %>%
+      mutate(Sum_Z = Z_Blk + Z_Rim + Z_Defl + Z_MD) %>%
+      group_by(numSeason) %>%
+      mutate(Pct = rank(Sum_Z) / n()) %>%
+      ungroup() %>%
+      filter(PLAYER_NAME == input$player_name)
+    
+    min_yr <- min(player_def$numSeason)
+    max_yr <- max(player_def$numSeason)
+    
+    player_def %>%
+      select(PLAYER_NAME, TEAM, numSeason, Pct_Blk, Pct_Rim, Pct_Defl, Pct_MD, Pct_Comp = Pct) %>%
+      pivot_longer(cols = c(Pct_Blk : Pct_Comp),
+                   names_prefix = "Pct_",
+                   names_to = "Category",
+                   values_to = "Pct") %>%
+      mutate(Category = factor(Category,
+                               levels = c("Comp","Blk","Rim","Defl","MD"))) %>%
+      mutate(Pct = 100*Pct,
+             sz = ifelse(Category == "Comp", 2, 1)) %>%
+      ggplot(aes(x = numSeason, y = Pct, color = Category)) +
+      geom_point(aes(size = Category)) +
+      geom_line() +
+      scale_x_continuous(breaks = seq(min_yr, max_yr, 1)) +
+      scale_y_continuous(limits = c(0, 100),
+                         breaks = seq(0,100,25)) +
+      scale_size_manual(values = c(6,4,4,4,4),
+                        guide = "none") +
+      scale_color_discrete(labels = c("Composite",
+                                      "Blocks",
+                                      "Rim Defense",
+                                      "Deflections",
+                                      "Matchup Diff")) +
+      labs(x = "Year",
+           y = "Percentile",
+           color = "Category",
+           title = paste(input$player_name,"Defensive Progression"))
+  }, height = 400, width = 450)
 }
 
 shinyApp(ui = ui, server = server)
