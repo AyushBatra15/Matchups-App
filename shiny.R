@@ -21,9 +21,10 @@ player_tms <- defstats %>%
   select(PLAYER_ID, numSeason, TEAM)
 
 player_options <- defstats %>%
-  filter(MIN >= 500) %>%
+  filter(MIN >= 800) %>%
   distinct(PLAYER_NAME) %>%
-  pull(PLAYER_NAME)
+  pull(PLAYER_NAME) %>%
+  sort()
 
 team_options <- defstats %>%
   distinct(TEAM) %>%
@@ -118,9 +119,30 @@ ui <- fluidPage(
                mainPanel(
                  tableOutput("leaderboard_table")
                )
+          ),
+      
+      tabPanel("By Player",
+               fluidRow(
+                 column(4, align = "center",
+                        
+                        tags$h3("Parameters"),
+                        
+                        selectInput(
+                          inputId = "player_name",
+                          label = "Player: ",
+                          choices = player_options,
+                          selected = "LeBron James"
+                        )
+                 )
+               ),
                
-               
-          )
+               mainPanel(
+                 tableOutput("player_table")
+                 # br(),
+                 # plotOutput("skills_plot"),
+                 # br()
+               )
+      )
        )
     )
 )
@@ -194,6 +216,110 @@ server <- function(input, output) {
       gt() %>%
       tab_header(title = "NBA Defensive Composite",
                  subtitle = "Matchup Difficulty = average season PTS/100 of opponent matchup") %>%
+      text_transform(
+        locations = cells_body(c(urlPlayerHeadshot, logo)),
+        fn = function(x){
+          web_image(
+            url = x,
+            height = px(35)
+          )
+        }
+      ) %>%
+      cols_label(urlPlayerHeadshot = "",
+                 PLAYER_NAME = "Player",
+                 numSeason = "Season",
+                 logo = "Tm",
+                 Pct_Blk = "PCT",
+                 PLUSMINUS = "+/-",
+                 Pct_Rim = "PCT",
+                 DEFLECTIONS = "DEFL",
+                 Pct_Defl = "PCT",
+                 MATCHUP_DIFF = "MATCHUP DIFF",
+                 Pct_MD = "PCT",
+                 Sum_Z = "Score",
+                 Pct = "PCT") %>%
+      fmt_number(columns = c(MATCHUP_DIFF), decimals = 1) %>%
+      fmt_number(columns = c(Sum_Z), decimals = 2) %>%
+      fmt_percent(columns = c(PLUSMINUS), decimals = 1) %>%
+      tab_spanner(label = "Blocks / 100",
+                  columns = c(BLK, Pct_Blk)) %>%
+      tab_spanner(label = "Rim DFG% +/-",
+                  columns = c(PLUSMINUS, Pct_Rim)) %>%
+      tab_spanner(label = "Deflections / 100",
+                  columns = c(DEFLECTIONS, Pct_Defl)) %>%
+      tab_spanner(label = "Matchup Difficulty",
+                  columns = c(MATCHUP_DIFF, Pct_MD)) %>%
+      tab_spanner(label = "Composite",
+                  columns = c(Sum_Z, Pct)) %>%
+      data_color(columns = c(Pct_Blk, Pct_Rim, Pct_Defl, Pct_MD, Pct),
+                 colors = color_scale) %>%
+      opt_row_striping() %>%
+      tab_source_note("By Ayush Batra | Data from NBA.com")
+  }, width = 1000)
+  
+  output$player_table <- render_gt( {
+    
+    player_board <- matchups %>%
+      filter(OFF_PLAYER_SZN_MIN >= 300) %>%
+      group_by(DEF_PLAYER_ID, numSeason) %>%
+      summarize(PLAYER_NAME = first(DEF_PLAYER_NAME),
+                MATCHUP_DIFF = weighted.mean(OFF_PLAYER_SZN_PTS, w = PARTIAL_POSS)) %>%
+      ungroup() %>%
+      rename(PLAYER_ID = DEF_PLAYER_ID) %>%
+      left_join(player_mins, by = c("PLAYER_ID","numSeason")) %>%
+      left_join(player_tms, by = c("PLAYER_ID","numSeason")) %>%
+      filter(!is.na(MIN))
+    
+    player_board <- player_board %>%
+      filter(MIN >= 800)
+    
+    player_board <- player_board %>%
+      group_by(numSeason) %>%
+      mutate(Pct = rank(MATCHUP_DIFF) / n(),
+             Z = (MATCHUP_DIFF - mean(MATCHUP_DIFF)) / sd(MATCHUP_DIFF)) %>%
+      ungroup()
+    
+    player_def <- defstats %>%
+      filter(MIN >= 800) %>%
+      group_by(numSeason) %>%
+      mutate(Pct_Blk = rank(BLK) / n(),
+             Z_Blk = (BLK - mean(BLK)) / sd(BLK),
+             Pct_Rim = rank(-PLUSMINUS) / n(),
+             Z_Rim = (mean(PLUSMINUS) - PLUSMINUS) / sd(PLUSMINUS),
+             Pct_Defl = rank(DEFLECTIONS) / n(),
+             Z_Defl = (DEFLECTIONS - mean(DEFLECTIONS)) / sd(DEFLECTIONS)) %>%
+      select(PLAYER_ID, PLAYER_NAME, numSeason, TEAM, MIN, BLK, Pct_Blk, Z_Blk,
+             PLUSMINUS, Pct_Rim, Z_Rim, DEFLECTIONS, Pct_Defl, Z_Defl)
+    
+    pb <- player_board %>%
+      select(PLAYER_ID, numSeason, MATCHUP_DIFF, Pct_MD = Pct, Z_MD = Z)
+    
+    player_def <- player_def %>%
+      inner_join(pb, by = c("PLAYER_ID","numSeason"))
+    
+    player_def <- player_def %>%
+      mutate(Sum_Z = Z_Blk + Z_Rim + Z_Defl + Z_MD) %>%
+      group_by(numSeason) %>%
+      mutate(Pct = rank(Sum_Z) / n()) %>%
+      ungroup() %>%
+      filter(PLAYER_NAME == input$player_name)
+    
+    player_def %>%
+      mutate(PLAYER_ID = as.numeric(PLAYER_ID)) %>%
+      mutate(Pct_Blk = round(100*Pct_Blk),
+             Pct_Rim = round(100*Pct_Rim),
+             Pct_Defl = round(100*Pct_Defl),
+             Pct_MD = round(100*Pct_MD),
+             Pct = round(100*Pct)) %>%
+      arrange(numSeason) %>%
+      left_join(headshots, by = c("PLAYER_ID" = "idPlayer")) %>%
+      left_join(team_info, by = c("TEAM" = "slugTeam")) %>%
+      select(urlPlayerHeadshot, PLAYER_NAME, numSeason, logo, MIN, BLK, Pct_Blk, 
+             PLUSMINUS, Pct_Rim, DEFLECTIONS, Pct_Defl, MATCHUP_DIFF, Pct_MD, 
+             Sum_Z, Pct) %>%
+      gt() %>%
+      tab_header(title = "NBA Defensive Composite",
+                 subtitle = "Matchup Difficulty = average season PTS/100 of opponent matchup | Only Seasons with at least 800 Minutes Displayed") %>%
       text_transform(
         locations = cells_body(c(urlPlayerHeadshot, logo)),
         fn = function(x){
