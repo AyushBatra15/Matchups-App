@@ -75,6 +75,20 @@ def_leaders <- def_leaders %>%
   ungroup()
 
 
+ui <- fluidPage(
+  
+  titlePanel("NBA Defensive Stats"),
+  
+  mainPanel(
+    navbarPage("Ayush Batra",
+      tabPanel("Leaderboard",
+               fluidRow(
+                 
+               ))
+       )
+  )
+  
+)
          
 
 
