@@ -129,6 +129,14 @@ ui <- fluidPage(
                           value = 1000
                         ),
                         
+                        selectInput(
+                          inputId = "sort_element",
+                          label = "Sort By:",
+                          choices = c("Composite","Blocks","Rim Defense",
+                                      "Deflections","Matchup Difficulty"),
+                          selected = "Composite"
+                        ),
+                        
                     )
                ),
                
@@ -264,14 +272,40 @@ server <- function(input, output) {
         filter(TEAM == input$team)
     }
     
-    def_leaders %>%
+    def_leaders <- def_leaders %>%
       mutate(PLAYER_ID = as.numeric(PLAYER_ID)) %>%
       mutate(Pct_Blk = round(100*Pct_Blk),
              Pct_Rim = round(100*Pct_Rim),
              Pct_Defl = round(100*Pct_Defl),
              Pct_MD = round(100*Pct_MD),
-             Pct = round(100*Pct)) %>%
-      arrange(-Sum_Z) %>%
+             Pct = round(100*Pct))
+    
+    if (input$sort_element == "Composite") {
+      def_leaders <- def_leaders %>%
+        arrange(-Sum_Z)
+    }
+    
+    else if (input$sort_element == "Blocks") {
+      def_leaders <- def_leaders %>%
+        arrange(-BLK, -Sum_Z)
+    }
+    
+    else if (input$sort_element == "Rim Defense") {
+      def_leaders <- def_leaders %>%
+        arrange(PLUSMINUS, -Sum_Z)
+    }
+    
+    else if (input$sort_element == "Deflections") {
+      def_leaders <- def_leaders %>%
+        arrange(-DEFLECTIONS, -Sum_Z)
+    }
+    
+    else if (input$sort_element == "Matchup Difficulty") {
+      def_leaders <- def_leaders %>%
+        arrange(-MATCHUP_DIFF, -Sum_Z)
+    }
+    
+    def_leaders %>%
       left_join(headshots, by = c("PLAYER_ID" = "idPlayer")) %>%
       left_join(team_info, by = c("TEAM" = "slugTeam")) %>%
       select(urlPlayerHeadshot, PLAYER_NAME, numSeason, logo, MIN, BLK, Pct_Blk, 
