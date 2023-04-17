@@ -132,6 +132,13 @@ ui <- fluidPage(
                           label = "Player: ",
                           choices = player_options,
                           selected = "LeBron James"
+                        ),
+                        
+                        selectInput(
+                          inputId = "player_season",
+                          label = "Season for Most Common Matchups: ",
+                          choices = 2019:2023,
+                          selected = 2023,
                         )
                  )
                ),
@@ -140,7 +147,8 @@ ui <- fluidPage(
                  tableOutput("player_table"),
                  br(),
                  plotOutput("skills_plot"),
-                 br()
+                 br(),
+                 tableOutput("common_matchups_tbl")
                )
       )
        )
@@ -438,6 +446,51 @@ server <- function(input, output) {
            color = "Category",
            title = paste(input$player_name,"Defensive Progression"))
   }, height = 400, width = 450)
+  
+  output$common_matchups_tbl <- render_gt( {
+    season_pts <- matchups %>%
+      distinct(OFF_PLAYER_ID, numSeason, OFF_PLAYER_SZN_PTS)
+    
+    common <- matchups %>%
+      filter(DEF_PLAYER_NAME == input$player_name,
+             numSeason == input$player_season) %>%
+      group_by(OFF_PLAYER_ID, DEF_PLAYER_ID, numSeason) %>%
+      summarize(OFF_PLAYER_NAME = first(OFF_PLAYER_NAME),
+                DEF_PLAYER_NAME = first(DEF_PLAYER_NAME),
+                PARTIAL_POSS = sum(PARTIAL_POSS)) %>%
+      ungroup() %>%
+      arrange(-PARTIAL_POSS) %>%
+      head(10) %>%
+      add_column(Rk = c(1:10)) %>%
+      left_join(season_pts, by = c("OFF_PLAYER_ID", "numSeason"))
+    
+    common %>%
+      left_join(headshots, by = c("OFF_PLAYER_ID" = "idPlayer")) %>%
+      left_join(headshots, by = c("DEF_PLAYER_ID" = "idPlayer"),
+                suffix = c(".off",".def")) %>%
+      select(Rk, urlPlayerHeadshot.off, OFF_PLAYER_NAME, OFF_PLAYER_SZN_PTS,
+             urlPlayerHeadshot.def, DEF_PLAYER_NAME, numSeason, PARTIAL_POSS) %>%
+      gt() %>%
+      text_transform(
+        locations = cells_body(c(urlPlayerHeadshot.off, urlPlayerHeadshot.def)),
+        fn = function(x){
+          web_image(
+            url = x,
+            height = px(35)
+          )
+        }
+      ) %>%
+      tab_header(title = paste(input$player_name, "Most Common Defensive Matchups: ", input$player_season)) %>%
+      cols_label(urlPlayerHeadshot.off = "",
+                 OFF_PLAYER_NAME = "Offense",
+                 OFF_PLAYER_SZN_PTS = "Season PTS/100",
+                 urlPlayerHeadshot.def = "",
+                 DEF_PLAYER_NAME = "Defense",
+                 numSeason = "Season",
+                 PARTIAL_POSS = "Possessions") %>%
+      opt_row_striping() %>%
+      tab_source_note("By Ayush Batra | Data from NBA.com")
+  }, width = 700)
 }
 
 shinyApp(ui = ui, server = server)
