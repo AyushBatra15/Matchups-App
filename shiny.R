@@ -5,6 +5,23 @@ library(gt)
 library(webshot)
 library(ggimage)
 library(scales)
+library(ggbeeswarm)
+
+myTheme <- function() {
+  theme_minimal() %+replace%
+    theme(plot.background = element_rect(fill = "white", color = NA),
+          plot.title = element_text(size = 18, hjust = 0.5, vjust = 2),
+          plot.subtitle = element_text(size = 12, hjust = 0.5, vjust = 1),
+          plot.caption = element_text(size = 9, hjust = 1, vjust = -5),
+          axis.title.x = element_text(size = 15, vjust = -2, margin = margin(0,0,2,0)),
+          axis.title.y = element_text(size = 15,  angle = 90, vjust = 3,
+                                      margin = margin(0,0,0,2)),
+          axis.text = element_text(size = 13),
+          strip.text = element_text(size = 15, margin = margin(3,0,3,0)),
+          legend.title = element_text(size = 13, hjust = 0.5),
+          legend.text = element_text(size = 12),
+          legend.box.background = element_blank())
+}
 
 matchups <- read_csv(url("https://raw.githubusercontent.com/AyushBatra15/Matchups-App/main/data/all_matchups.csv"))
 defstats <- read_csv(url("https://raw.githubusercontent.com/AyushBatra15/Matchups-App/main/data/defstats.csv"))
@@ -79,7 +96,6 @@ def_leaders <- def_leaders %>%
 
 color_scale <- col_numeric(c("#E09D9D","white","#87B87E"), domain = c(0, 100), alpha = 0.75)
 
-
 ui <- fluidPage(
   
   titlePanel("NBA Defensive Stats"),
@@ -150,6 +166,46 @@ ui <- fluidPage(
                  br(),
                  tableOutput("common_matchups_tbl")
                )
+      ),
+      
+      tabPanel("Player Comparison",
+               fluidRow(
+                 column(4, align = "center",
+                        
+                        tags$h3("Parameters"),
+                        
+                        selectInput(
+                          inputId = "player1",
+                          label = "Player 1: ",
+                          choices = player_options,
+                          selected = "LeBron James"
+                        ),
+                        
+                        selectInput(
+                          inputId = "player2",
+                          label = "Player 2: ",
+                          choices = player_options,
+                          selected = "Kevin Durant"
+                        ),
+                        
+                        selectInput(
+                          inputId = "comp_season",
+                          label = "Season: ",
+                          choices = 2019:2023,
+                          selected = 2023
+                        )
+                   
+                 )
+               ),
+               
+               mainPanel(
+                 tableOutput("comp_table"),
+                 br(),
+                 plotOutput("skills_comp", inline = TRUE),
+                 br(),
+                 plotOutput("matchups_comp", inline = TRUE)
+               )
+      
       )
        )
     )
@@ -444,7 +500,8 @@ server <- function(input, output) {
       labs(x = "Year",
            y = "Percentile",
            color = "Category",
-           title = paste(input$player_name,"Defensive Progression"))
+           title = paste(input$player_name,"Defensive Progression")) +
+      myTheme()
   }, height = 400, width = 450)
   
   output$common_matchups_tbl <- render_gt( {
@@ -491,6 +548,221 @@ server <- function(input, output) {
       opt_row_striping() %>%
       tab_source_note("By Ayush Batra | Data from NBA.com")
   }, width = 700)
+  
+  output$comp_table <- render_gt( {
+    comp_m <- matchups %>%
+      filter(OFF_PLAYER_SZN_MIN >= 300) %>%
+      group_by(DEF_PLAYER_ID, numSeason) %>%
+      summarize(PLAYER_NAME = first(DEF_PLAYER_NAME),
+                MATCHUP_DIFF = weighted.mean(OFF_PLAYER_SZN_PTS, w = PARTIAL_POSS)) %>%
+      ungroup() %>%
+      rename(PLAYER_ID = DEF_PLAYER_ID) %>%
+      left_join(player_mins, by = c("PLAYER_ID","numSeason")) %>%
+      left_join(player_tms, by = c("PLAYER_ID","numSeason")) %>%
+      filter(!is.na(MIN))
+    
+    comp_m <- comp_m %>%
+      filter(MIN >= 800)
+    
+    comp_board <- comp_m %>%
+      group_by(numSeason) %>%
+      mutate(Pct = rank(MATCHUP_DIFF) / n(),
+             Z = (MATCHUP_DIFF - mean(MATCHUP_DIFF)) / sd(MATCHUP_DIFF)) %>%
+      ungroup()
+    
+    comp_def <- defstats %>%
+      filter(MIN >= 800) %>%
+      group_by(numSeason) %>%
+      mutate(Pct_Blk = rank(BLK) / n(),
+             Z_Blk = (BLK - mean(BLK)) / sd(BLK),
+             Pct_Rim = rank(-PLUSMINUS) / n(),
+             Z_Rim = (mean(PLUSMINUS) - PLUSMINUS) / sd(PLUSMINUS),
+             Pct_Defl = rank(DEFLECTIONS) / n(),
+             Z_Defl = (DEFLECTIONS - mean(DEFLECTIONS)) / sd(DEFLECTIONS)) %>%
+      select(PLAYER_ID, PLAYER_NAME, numSeason, TEAM, MIN, BLK, Pct_Blk, Z_Blk,
+             PLUSMINUS, Pct_Rim, Z_Rim, DEFLECTIONS, Pct_Defl, Z_Defl)
+    
+    comp_board <- comp_board %>%
+      select(PLAYER_ID, numSeason, MATCHUP_DIFF, Pct_MD = Pct, Z_MD = Z)
+    
+    comp_def <- comp_def %>%
+      inner_join(comp_board, by = c("PLAYER_ID","numSeason"))
+    
+    comp_def <- comp_def %>%
+      mutate(Sum_Z = Z_Blk + Z_Rim + Z_Defl + Z_MD) %>%
+      group_by(numSeason) %>%
+      mutate(Pct = rank(Sum_Z) / n()) %>%
+      ungroup() %>%
+      filter(PLAYER_NAME %in% c(input$player1, input$player2),
+             numSeason == input$comp_season)
+    
+    comp_def %>%
+      mutate(PLAYER_ID = as.numeric(PLAYER_ID)) %>%
+      mutate(Pct_Blk = round(100*Pct_Blk),
+             Pct_Rim = round(100*Pct_Rim),
+             Pct_Defl = round(100*Pct_Defl),
+             Pct_MD = round(100*Pct_MD),
+             Pct = round(100*Pct)) %>%
+      arrange(-Sum_Z) %>%
+      left_join(headshots, by = c("PLAYER_ID" = "idPlayer")) %>%
+      left_join(team_info, by = c("TEAM" = "slugTeam")) %>%
+      select(urlPlayerHeadshot, PLAYER_NAME, numSeason, logo, MIN, BLK, Pct_Blk, 
+             PLUSMINUS, Pct_Rim, DEFLECTIONS, Pct_Defl, MATCHUP_DIFF, Pct_MD, 
+             Sum_Z, Pct) %>%
+      gt() %>%
+      tab_header(title = paste(input$player1, "vs", input$player2, input$comp_season,": Defense"),
+                 subtitle = "Matchup Difficulty = average season PTS/100 of opponent matchup | Only Seasons with at least 800 Minutes Displayed") %>%
+      text_transform(
+        locations = cells_body(c(urlPlayerHeadshot, logo)),
+        fn = function(x){
+          web_image(
+            url = x,
+            height = px(35)
+          )
+        }
+      ) %>%
+      cols_label(urlPlayerHeadshot = "",
+                 PLAYER_NAME = "Player",
+                 numSeason = "Season",
+                 logo = "Tm",
+                 Pct_Blk = "PCT",
+                 PLUSMINUS = "+/-",
+                 Pct_Rim = "PCT",
+                 DEFLECTIONS = "DEFL",
+                 Pct_Defl = "PCT",
+                 MATCHUP_DIFF = "MATCHUP DIFF",
+                 Pct_MD = "PCT",
+                 Sum_Z = "Score",
+                 Pct = "PCT") %>%
+      fmt_number(columns = c(MATCHUP_DIFF), decimals = 1) %>%
+      fmt_number(columns = c(Sum_Z), decimals = 2) %>%
+      fmt_percent(columns = c(PLUSMINUS), decimals = 1) %>%
+      tab_spanner(label = "Blocks / 100",
+                  columns = c(BLK, Pct_Blk)) %>%
+      tab_spanner(label = "Rim DFG% +/-",
+                  columns = c(PLUSMINUS, Pct_Rim)) %>%
+      tab_spanner(label = "Deflections / 100",
+                  columns = c(DEFLECTIONS, Pct_Defl)) %>%
+      tab_spanner(label = "Matchup Difficulty",
+                  columns = c(MATCHUP_DIFF, Pct_MD)) %>%
+      tab_spanner(label = "Composite",
+                  columns = c(Sum_Z, Pct)) %>%
+      data_color(columns = c(Pct_Blk, Pct_Rim, Pct_Defl, Pct_MD, Pct),
+                 colors = color_scale) %>%
+      opt_row_striping() %>%
+      tab_source_note("By Ayush Batra | Data from NBA.com")
+  }, width = 1000)
+  
+  output$skills_comp <- renderPlot({
+    matchup_diff <- matchups %>%
+      filter(OFF_PLAYER_SZN_MIN >= 300) %>%
+      group_by(DEF_PLAYER_ID, numSeason) %>%
+      summarize(PLAYER_NAME = first(DEF_PLAYER_NAME),
+                MATCHUP_DIFF = weighted.mean(OFF_PLAYER_SZN_PTS, w = PARTIAL_POSS)) %>%
+      ungroup() %>%
+      rename(PLAYER_ID = DEF_PLAYER_ID) %>%
+      left_join(player_mins, by = c("PLAYER_ID","numSeason")) %>%
+      left_join(player_tms, by = c("PLAYER_ID","numSeason")) %>%
+      filter(!is.na(MIN)) %>%
+      filter(MIN >= 800,
+             numSeason == input$comp_season)
+    
+    other_def <- defstats %>%
+      filter(MIN >= 800,
+             numSeason == input$comp_season)
+    
+    avg_md <- matchup_diff %>%
+      summarize(avg = mean(MATCHUP_DIFF)) %>%
+      mutate(stat = "MATCHUP_DIFF") %>%
+      select(stat, avg)
+    
+    avg_def <- defstats %>%
+      summarize(avg_BLK = mean(BLK),
+                avg_DEFLECTIONS = mean(DEFLECTIONS),
+                avg_PLUSMINUS = mean(PLUSMINUS)) %>%
+      pivot_longer(cols = c(avg_BLK : avg_PLUSMINUS),
+                   names_prefix = "avg_",
+                   names_to = "stat",
+                   values_to = "avg")
+    
+    avg_stats <- rbind(avg_md, avg_def)
+    
+    avg_stats <- avg_stats %>%
+      rename(value = avg) %>%
+      mutate(PLAYER_NAME = "avg") %>%
+      select(PLAYER_NAME, stat, value)
+    
+    p_md <- matchup_diff %>%
+      filter(PLAYER_NAME %in% c(input$player1, input$player2)) %>%
+      mutate(stat = "MATCHUP_DIFF") %>%
+      select(PLAYER_NAME, stat, value = MATCHUP_DIFF)
+    
+    p_def <- other_def %>%
+      filter(PLAYER_NAME %in% c(input$player1, input$player2)) %>%
+      select(PLAYER_NAME, BLK, DEFLECTIONS, PLUSMINUS) %>%
+      pivot_longer(!PLAYER_NAME,
+                   names_to = "stat",
+                   values_to = "value")
+    
+    p_stats <- rbind(p_md, p_def)
+    
+    all_stats <- rbind(avg_stats, p_stats)
+    
+    all_stats %>%
+      mutate(PLAYER_NAME = ifelse(PLAYER_NAME == "avg",
+                                  "NBA Average",
+                                  PLAYER_NAME)) %>%
+      mutate(PLAYER_NAME = factor(PLAYER_NAME,
+                                  levels = c("NBA Average", 
+                                             input$player1, 
+                                             input$player2))) %>%
+      mutate(stat = case_when(
+        stat == "MATCHUP_DIFF" ~ "Matchup Difficulty",
+        stat == "BLK" ~ "Blocks",
+        stat == "PLUSMINUS" ~ "Rim DFG +/-",
+        stat == "DEFLECTIONS" ~ "Deflections"
+      )) %>%
+      mutate(stat = factor(stat,
+                           levels = c("Blocks","Rim DFG +/-",
+                                      "Deflections","Matchup Difficulty"))) %>%
+      ggplot(aes(x = PLAYER_NAME, y = value, fill = PLAYER_NAME)) +
+      geom_col(width = 0.8, color = 'black', show.legend = F) +
+      scale_fill_manual(values = c("#808080","#F8766D","#00BFC4")) +
+      facet_wrap(~stat, scales = "free", ncol = 2) +
+      labs(x = "",
+           y = "",
+           title = paste(input$player1, "vs", input$player2, input$comp_season, "Defensive Skills")) +
+      myTheme()
+  }, height = 700, width = 700)
+  
+  output$matchups_comp <- renderPlot({
+    player_matchups <- matchups %>%
+      filter(OFF_PLAYER_SZN_MIN >= 300,
+             numSeason == input$comp_season)
+    
+    md_avg <- weighted.mean(player_matchups$OFF_PLAYER_SZN_PTS,
+                            w = player_matchups$PARTIAL_POSS)
+    
+    player_matchups <- player_matchups %>%
+      filter(DEF_PLAYER_NAME %in% c(input$player1, input$player2))
+    
+    player_matchups %>%
+      filter(PARTIAL_POSS >= 10) %>%
+      left_join(player_tms, by = c("DEF_PLAYER_ID" = "PLAYER_ID","numSeason")) %>%
+      left_join(team_info, by = c("TEAM" = "slugTeam")) %>%
+      ggplot(aes(x = DEF_PLAYER_NAME,
+                 y = OFF_PLAYER_SZN_PTS)) +
+      geom_hline(yintercept = md_avg, linetype = 'dashed') +
+      geom_quasirandom(aes(fill = color1, size = PARTIAL_POSS),
+                       shape = 21, color = 'black') +
+      scale_fill_identity() +
+      labs(x = "Player",
+           y = "Opponent Season PTS/100",
+           size = "Poss",
+           title = paste(input$player1,"vs",input$player2,": Matchup Difficulty")) +
+      myTheme()
+  }, height = 600, width = 600)
+  
 }
 
 shinyApp(ui = ui, server = server)
