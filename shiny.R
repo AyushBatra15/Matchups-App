@@ -170,7 +170,7 @@ ui <- fluidPage(
                mainPanel(
                  tableOutput("player_table"),
                  br(),
-                 plotOutput("skills_plot"),
+                 plotOutput("skills_plot", inline = TRUE),
                  br(),
                  tableOutput("common_matchups_tbl")
                )
@@ -508,35 +508,49 @@ server <- function(input, output) {
     min_yr <- min(player_def$numSeason)
     max_yr <- max(player_def$numSeason)
     
-    player_def %>%
+    player_def <- player_def %>%
       select(PLAYER_NAME, TEAM, numSeason, Pct_Blk, Pct_Rim, Pct_Defl, Pct_MD, Pct_Comp = Pct) %>%
       pivot_longer(cols = c(Pct_Blk : Pct_Comp),
                    names_prefix = "Pct_",
                    names_to = "Category",
                    values_to = "Pct") %>%
+      mutate(Category = case_when(
+        Category == "Comp" ~ "Composite",
+        Category == "Blk" ~ "Blocks",
+        Category == "Rim" ~ "Rim Defense",
+        Category == "Defl" ~ "Deflections",
+        Category == "MD" ~ "Matchup Diff"
+      )) %>%
       mutate(Category = factor(Category,
-                               levels = c("Comp","Blk","Rim","Defl","MD"))) %>%
-      mutate(Pct = 100*Pct,
-             sz = ifelse(Category == "Comp", 2, 1)) %>%
+                               levels = c("Composite","Blocks","Rim Defense",
+                                          "Deflections","Matchup Diff"))) %>%
+      mutate(Pct = 100*Pct)
+    
+    player_def %>%
       ggplot(aes(x = numSeason, y = Pct, color = Category)) +
-      geom_point(aes(size = Category)) +
-      geom_line() +
+      geom_point(aes(size = Category), show.legend = F) +
+      geom_line(show.legend = F) +
+      geom_text(data = player_def %>% filter(numSeason == max(numSeason)),
+                aes(x = numSeason + 0.1, y = Pct, label = Category),
+                hjust = 'left', show.legend = F, size = 5) +
       scale_x_continuous(breaks = seq(min_yr, max_yr, 1)) +
       scale_y_continuous(limits = c(0, 100),
                          breaks = seq(0,100,25)) +
       scale_size_manual(values = c(6,4,4,4,4),
                         guide = "none") +
-      scale_color_discrete(labels = c("Composite",
-                                      "Blocks",
-                                      "Rim Defense",
-                                      "Deflections",
-                                      "Matchup Diff")) +
+      # scale_color_discrete(labels = c("Composite",
+      #                                 "Blocks",
+      #                                 "Rim Defense",
+      #                                 "Deflections",
+      #                                 "Matchup Diff")) +
       labs(x = "Year",
            y = "Percentile",
            color = "Category",
            title = paste(input$player_name,"Defensive Progression")) +
-      myTheme()
-  }, height = 400, width = 450)
+      myTheme() +
+      coord_cartesian(clip = 'off') +
+      theme(plot.margin = margin(0.1,1,0.25,0.1, unit = "in"))
+  }, height = 400, width = 500)
   
   output$common_matchups_tbl <- render_gt( {
     season_pts <- matchups %>%
